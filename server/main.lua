@@ -46,6 +46,17 @@ local function notifyGang(gang, message)
     end
 end
 
+-- Notify a gang of territory loss with an accompanying client-side screen shock
+local function notifyGangLoss(gang, message)
+    for _, pid in ipairs(GetPlayers()) do
+        local src = tonumber(pid)
+        if src and Framework.getGang(src) == gang then
+            Framework.notify(src, message, 'warning')
+            TriggerClientEvent('187graffiti:wallLost', src)
+        end
+    end
+end
+
 -- Find identifier of a player who last owned a wall (for stats; best-effort)
 local function findGangMemberIdentifier(gang)
     for _, pid in ipairs(GetPlayers()) do
@@ -173,6 +184,10 @@ RegisterNetEvent('187graffiti:spray', function(data)
 
     -- ── Case 1: Defending own wall ──
     if wall.ownerGang == gang then
+        if not wall.contestGang or wall.contestCount == 0 then
+            TriggerClientEvent('187graffiti:notify', source, 'info', Locale['wall_secure'])
+            return
+        end
         wall.contestGang  = nil
         wall.contestCount = 0
         saveWallState(wallId)
@@ -188,6 +203,10 @@ RegisterNetEvent('187graffiti:spray', function(data)
         if wall.contestGang == gang then
             wall.contestCount = wall.contestCount + 1
         else
+            -- Notify the gang whose progress is being reset
+            if wall.contestGang and wall.contestGang ~= gang and wallConfig then
+                notifyGang(wall.contestGang, Locale['contest_reset']:format(wallConfig.name))
+            end
             wall.contestGang  = gang
             wall.contestCount = 1
         end
@@ -222,6 +241,10 @@ RegisterNetEvent('187graffiti:spray', function(data)
     if wall.contestGang == gang then
         wall.contestCount = wall.contestCount + 1
     else
+        -- Notify the gang whose contest progress is being wiped
+        if wall.contestGang and wall.contestGang ~= gang and wallConfig then
+            notifyGang(wall.contestGang, Locale['contest_reset']:format(wallConfig.name))
+        end
         wall.contestGang  = gang
         wall.contestCount = 1
     end
@@ -242,7 +265,7 @@ RegisterNetEvent('187graffiti:spray', function(data)
         local losingIdentifier = findGangMemberIdentifier(previousOwner)
         if losingIdentifier then incrementWallsLost(losingIdentifier) end
         if wallConfig then
-            notifyGang(previousOwner, Locale['wall_taken']:format(gang, wallConfig.name))
+            notifyGangLoss(previousOwner, Locale['wall_taken']:format(gang, wallConfig.name))
         end
 
         if GetResourceState('187Banking') == 'started' then
@@ -300,6 +323,58 @@ if Config.Framework == 'standalone' then
         Framework.setGang(source, args[1])
         TriggerClientEvent('187graffiti:notify', source, 'success', Locale['admin_gang_done']:format(string.lower(args[1])))
     end, false)
+end
+
+-- /gstats — show personal spray statistics
+RegisterCommand('gstats', function(source, args)
+    if source == 0 then return end
+    local identifier = GetPlayerIdentifier(source, 0)
+    if not identifier then return end
+    local rows = MySQL.query.await('SELECT * FROM `187graffiti_stats` WHERE identifier = ?', { identifier })
+    local s = rows and rows[1] or { total_sprays = 0, walls_tagged = 0, walls_lost = 0 }
+    TriggerClientEvent('187graffiti:notify', source, 'info',    Locale['stats_header'])
+    TriggerClientEvent('187graffiti:notify', source, 'inform',  Locale['stats_sprays']:format(s.total_sprays  or 0))
+    TriggerClientEvent('187graffiti:notify', source, 'success', Locale['stats_tagged']:format(s.walls_tagged  or 0))
+    TriggerClientEvent('187graffiti:notify', source, 'warning', Locale['stats_lost']:format(s.walls_lost     or 0))
+end, false)
+
+-- ─── Territory cycle ─────────────────────────────────────────────────────────
+
+if Config.RewardCycleEnabled then
+    Citizen.CreateThread(function()
+        while true do
+            Citizen.Wait(Config.RewardCycleHours * 3600 * 1000)
+
+            local gangCounts = {}
+            for _, state in pairs(wallsState) do
+                if state.ownerGang then
+                    gangCounts[state.ownerGang] = (gangCounts[state.ownerGang] or 0) + 1
+                end
+            end
+
+            local topGang, topCount = nil, 0
+            for gang, count in pairs(gangCounts) do
+                if count > topCount then topGang = gang; topCount = count end
+            end
+
+            if topGang then
+                local reward = topCount * Config.RewardCycleAmount
+                local msg = ('Territory cycle: %s dominates with %d walls — $%d reward!'):format(topGang, topCount, reward)
+                for _, pid in ipairs(GetPlayers()) do
+                    local src = tonumber(pid)
+                    if src then
+                        if Framework.getGang(src) == topGang then
+                            Framework.addMoney(src, reward)
+                            Framework.notify(src, msg, 'success')
+                        else
+                            Framework.notify(src, msg, 'inform')
+                        end
+                    end
+                end
+                if Config.Debug then print('[187Graffiti] Cycle complete — ' .. msg) end
+            end
+        end
+    end)
 end
 
 -- ─── Cleanup ─────────────────────────────────────────────────────────────────

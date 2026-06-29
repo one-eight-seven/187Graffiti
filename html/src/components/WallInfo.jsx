@@ -1,17 +1,30 @@
-export default function WallInfo({ wall, sprayCount, playerGang }) {
+export default function WallInfo({ wall, sprayCount, playerGang, tagStyles = [] }) {
     if (!wall) return null
 
-    const isOwn = wall.ownerGang && wall.ownerGang === playerGang
+    const isOwn     = wall.ownerGang && wall.ownerGang === playerGang
+    const tagStyle  = tagStyles.find(s => s.id === wall.tagStyle)
 
     return (
         <div style={{ marginBottom: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{wall.name}</span>
                 {wall.ownerGang
                     ? <span className={`badge ${isOwn ? 'badge-success' : 'badge-danger'}`}>{wall.ownerGang}</span>
                     : <span className="badge badge-success">Unclaimed</span>
                 }
             </div>
+
+            {wall.ownerGang && tagStyle && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    {tagStyle.emoji} {tagStyle.label} tag
+                </div>
+            )}
+
+            {!wall.ownerGang && !wall.contestGang && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Spray {sprayCount} times to claim this wall.
+                </div>
+            )}
 
             {wall.contestGang && (
                 <div style={{

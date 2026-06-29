@@ -25,18 +25,38 @@
     function $(id) { return document.getElementById(id); }
 
     function renderWallInfo() {
-        const { wall, sprayCount, playerGang } = state;
+        const { wall, sprayCount, playerGang, tagStyles } = state;
         if (!wall) return;
 
         wallNameEl.textContent = wall.name || '';
 
-        const isOwn = wall.ownerGang && wall.ownerGang === playerGang;
+        const isOwn     = wall.ownerGang && wall.ownerGang === playerGang;
+        const tagStyle  = tagStyles.find(s => s.id === wall.tagStyle);
+
         if (wall.ownerGang) {
             wallOwnerEl.className = `badge ${isOwn ? 'badge-success' : 'badge-danger'}`;
             wallOwnerEl.textContent = wall.ownerGang;
         } else {
             wallOwnerEl.className = 'badge badge-success';
             wallOwnerEl.textContent = 'Unclaimed';
+        }
+
+        // Tag style line
+        const styleEl = document.getElementById('g-tag-style');
+        if (styleEl) {
+            if (wall.ownerGang && tagStyle) {
+                styleEl.textContent = tagStyle.emoji + ' ' + tagStyle.label + ' tag';
+                styleEl.style.display = '';
+            } else {
+                styleEl.style.display = 'none';
+            }
+        }
+
+        // Claim hint
+        const claimHint = document.getElementById('g-claim-hint');
+        if (claimHint) {
+            claimHint.style.display = (!wall.ownerGang && !wall.contestGang) ? '' : 'none';
+            claimHint.textContent = `Spray ${sprayCount} times to claim this wall.`;
         }
 
         if (wall.contestGang) {
@@ -184,6 +204,8 @@
         <span id="g-wall-owner"></span>
       </div>
 
+      <div id="g-tag-style" style="display:none;font-size:12px;color:var(--text-muted);margin-bottom:6px"></div>
+      <div id="g-claim-hint" style="display:none;font-size:12px;color:var(--text-muted);margin-bottom:6px"></div>
       <div id="g-contest" class="contest-box" style="display:none">
         ⚠ Contested by <strong id="g-contest-gang"></strong>
         — <span id="g-contest-count"></span> sprays

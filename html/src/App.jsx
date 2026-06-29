@@ -89,7 +89,7 @@ function App() {
 
                 {activeTab === 'spray' && (
                     <>
-                        <WallInfo wall={wall} sprayCount={sprayCount} playerGang={playerGang} />
+                        <WallInfo wall={wall} sprayCount={sprayCount} playerGang={playerGang} tagStyles={tagStyles} />
                         <div className="divider" />
 
                         <div style={{ marginBottom: '12px' }}>

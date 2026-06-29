@@ -24,6 +24,11 @@ Config.BlipScale  = 0.8
 -- Standalone: command for assigning a gang to yourself (no framework)
 Config.StandaloneGangCommand = 'setgang'
 
+-- Territory reward cycle (optional)
+Config.RewardCycleEnabled = false       -- set true to award the dominant gang periodically
+Config.RewardCycleHours   = 24          -- real-time hours between cycles
+Config.RewardCycleAmount  = 500         -- $ per wall owned given to each online gang member
+
 -- Graffiti walls — predefined locations across Los Santos
 Config.Walls = {
     { id = 1,  name = 'Vespucci Canals',       coords = vector4(-1097.89, -1449.95,  4.95,  90.0) },

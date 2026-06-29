@@ -1,10 +1,29 @@
-local wallStates    = {}   -- [wallId] = { ownerGang, tagStyle, contestGang, contestCount }
-local wallBlips     = {}   -- [wallId] = blipHandle
-local nearbyWallId  = nil
-local isSprayActive = false
-local textUIShown   = false
-local nuiIsOpen     = false
-local openedWallId  = nil
+local wallStates     = {}   -- [wallId] = { ownerGang, tagStyle, contestGang, contestCount }
+local wallBlips      = {}   -- [wallId] = blipHandle
+local nearbyWallId   = nil
+local isSprayActive  = false
+local textUIShown    = false
+local nuiIsOpen      = false
+local openedWallId   = nil
+local lastSprayTime  = 0    -- GetGameTimer() of last completed spray
+
+-- ─── 3D text helper ──────────────────────────────────────────────────────────
+
+local function DrawText3D(x, y, z, text)
+    local onScreen, sx, sy = World3dToScreen2d(x, y, z)
+    if not onScreen then return end
+    local cx, cy, cz = table.unpack(GetGameplayCamCoords())
+    local dist = #(vector3(cx, cy, cz) - vector3(x, y, z))
+    local scale = math.min(0.45, (1.0 / dist) * 3.5)
+    SetTextScale(scale, scale)
+    SetTextFont(4)
+    SetTextProportional(true)
+    SetTextColour(255, 255, 255, 210)
+    SetTextOutline()
+    SetTextEntry('STRING')
+    AddTextComponentString(text)
+    DrawText(sx, sy - 0.005)
+end
 
 -- ─── Blip management ─────────────────────────────────────────────────────────
 
@@ -18,6 +37,11 @@ local function setBlipLabel(blip, wallName, ownerGang)
     BeginTextCommandSetBlipName('STRING')
     AddTextComponentString(label)
     EndTextCommandSetBlipName(blip)
+end
+
+local function setBlipContestPulse(blip, isContested)
+    SetBlipFlashes(blip, isContested)
+    if isContested then SetBlipFlashTimer(blip, 800) end
 end
 
 local function buildBlips(walls)
@@ -35,6 +59,7 @@ local function buildBlips(walls)
         SetBlipAsShortRange(blip, true)
         SetBlipColour(blip, getBlipColor(state.ownerGang))
         setBlipLabel(blip, wall.name, state.ownerGang)
+        setBlipContestPulse(blip, state.contestGang ~= nil)
         wallBlips[wall.id] = blip
     end
 end
@@ -44,6 +69,7 @@ local function refreshBlip(wallId, state)
     local blip = wallBlips[wallId]
     if not blip or not DoesBlipExist(blip) then return end
     SetBlipColour(blip, getBlipColor(state.ownerGang))
+    setBlipContestPulse(blip, state.contestGang ~= nil)
     local wallConfig = nil
     for _, w in ipairs(Config.Walls) do
         if w.id == wallId then wallConfig = w; break end
@@ -85,6 +111,7 @@ local function openTagUI(wallId)
     nuiIsOpen    = true
     openedWallId = wallId
 
+    PlaySoundFrontend(-1, 'SELECT', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
     SetNuiFocus(true, true)
     SendNUIMessage({
         action = 'open',
@@ -111,18 +138,24 @@ end
 
 local function doSpraySequence(wallId, tagStyle)
     if isSprayActive then return end
+
+    -- Client-side cooldown guard (server enforces authoritatively)
+    local now = GetGameTimer()
+    if (now - lastSprayTime) < (Config.SprayCooldown * 1000) then
+        local remaining = math.ceil((Config.SprayCooldown * 1000 - (now - lastSprayTime)) / 1000)
+        lib.notify({ title = '187Graffiti', description = Locale['spray_cooldown']:format(remaining), type = 'warning' })
+        return
+    end
+
     isSprayActive = true
 
-    -- Spray-can pull-out sound
     PlaySoundFrontend(-1, 'PULL_OUT_AWARD', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
 
-    -- Spray animation (arm raise + hold)
     local animDict = 'weapon@w_sp_flaregun'
     RequestAnimDict(animDict)
     while not HasAnimDictLoaded(animDict) do Citizen.Wait(10) end
     TaskPlayAnim(cache.ped, animDict, 'idle_intro', 8.0, -8.0, -1, 49, 0, false, false, false)
 
-    -- Paint mist particle at arm level
     local coords = GetEntityCoords(cache.ped)
     local fwd    = GetEntityForwardVector(cache.ped)
     local px, py, pz = coords.x + fwd.x * 0.6, coords.y + fwd.y * 0.6, coords.z + 0.9
@@ -132,10 +165,6 @@ local function doSpraySequence(wallId, tagStyle)
     UseParticleFxAssetNextCall('scr_rcpaparazzo')
     local pfx = StartParticleFxLoopedAtCoord('scr_meth_pipe_smoke', px, py, pz, 0.0, 0.0, 0.0, 0.25, false, false, false, false)
 
-    -- Spray drip sound loop (repurposed)
-    PlaySoundFromCoord(-1, 'ATM_WINDOW', 'SCRIPTS/ATMS', px, py, pz, 0, true, 5.0, false)
-
-    -- Progress bar (cancelable)
     local completed = lib.progressBar({
         duration     = Config.SprayDuration,
         label        = 'Tagging wall...',
@@ -148,13 +177,12 @@ local function doSpraySequence(wallId, tagStyle)
     ClearPedTasks(cache.ped)
 
     if completed then
-        -- Sparks burst on finish
         UseParticleFxAssetNextCall('scr_rcpaparazzo')
         StartParticleFxNonLoopedAtCoord('scr_meth_pipe_smoke', px, py, pz, 0.0, 0.0, 0.0, 0.6, false, false, false)
 
         PlaySoundFrontend(-1, 'CHECKPOINT_COLLECTED', 'HUD_MINI_GAME_SOUNDSET', true)
         AnimpostfxPlay('SuccessNeutral', 400, false)
-
+        lastSprayTime = GetGameTimer()
         TriggerServerEvent('187graffiti:spray', { wallId = wallId, tagStyle = tagStyle })
     else
         PlaySoundFrontend(-1, 'CANCEL', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
@@ -188,10 +216,8 @@ RegisterNetEvent('187graffiti:wallUpdated', function(wallId, state)
     refreshBlip(wallId, state)
 
     if nuiIsOpen then
-        -- Push updated leaderboard to the Territory tab
         SendNUIMessage({ action = 'leaderboardUpdate', data = { leaderboard = computeLeaderboard() } })
 
-        -- If the player has this exact wall open in the spray tab, refresh its state
         if openedWallId == wallId then
             local wallConfig = nil
             for _, w in ipairs(Config.Walls) do
@@ -220,43 +246,97 @@ RegisterNetEvent('187graffiti:notify', function(type, message)
     lib.notify({ title = '187Graffiti', description = message, type = type })
 end)
 
+-- Screen shock + sound when losing territory
+RegisterNetEvent('187graffiti:wallLost', function()
+    PlaySoundFrontend(-1, 'CANCEL', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
+    AnimpostfxPlay('Damage', 600, false)
+end)
+
+-- ─── Tag label render thread ─────────────────────────────────────────────────
+-- Draws emoji + gang name above every claimed wall when player is within 30m
+
+local styleEmoji = {}
+for _, s in ipairs(Config.TagStyles) do styleEmoji[s.id] = s.emoji end
+
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        local playerCoords = GetEntityCoords(cache.ped)
+
+        for _, wall in ipairs(Config.Walls) do
+            local state = wallStates[wall.id]
+            if state and state.ownerGang then
+                local dist = #(playerCoords - vector3(wall.coords.x, wall.coords.y, wall.coords.z))
+                if dist < 30.0 then
+                    local emoji = styleEmoji[state.tagStyle] or '🎨'
+                    DrawText3D(wall.coords.x, wall.coords.y, wall.coords.z + 1.5, emoji .. ' ' .. state.ownerGang)
+                end
+            end
+        end
+    end
+end)
+
 -- ─── Main proximity thread ───────────────────────────────────────────────────
 
 Citizen.CreateThread(function()
-    -- Load initial state and build blips
     local walls = lib.callback.await('187graffiti:getWalls', false)
     if walls then
         for id, state in pairs(walls) do
             wallStates[tonumber(id)] = state
         end
         buildBlips(walls)
+
+        -- Populate style emoji lookup for any walls already claimed
+        for _, s in ipairs(Config.TagStyles) do styleEmoji[s.id] = s.emoji end
     end
 
     while true do
-        local playerCoords = GetEntityCoords(cache.ped)
-        local closest      = nil
-        local closestDist  = Config.SprayDistance
+        local playerCoords     = GetEntityCoords(cache.ped)
+        local closestMarker    = nil   -- within 8m (ground marker)
+        local closestInteract  = nil   -- within SprayDistance (text UI + E key)
+        local markerDist       = 8.0
+        local interactDist     = Config.SprayDistance
 
         for _, wall in ipairs(Config.Walls) do
             local d = #(playerCoords - vector3(wall.coords.x, wall.coords.y, wall.coords.z))
-            if d < closestDist then
-                closestDist = d
-                closest     = wall
+            if d < markerDist then
+                markerDist    = d
+                closestMarker = wall
+            end
+            if d < interactDist then
+                interactDist     = d
+                closestInteract  = wall
             end
         end
 
-        if closest and not isSprayActive then
-            nearbyWallId = closest.id
+        if closestMarker and not isSprayActive then
+            -- Ground marker to guide player to exact wall spot
+            DrawMarker(25,
+                closestMarker.coords.x, closestMarker.coords.y, closestMarker.coords.z,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.6, 0.6, 0.25,
+                139, 92, 246, 130,
+                false, false, 2, false, nil, nil, false)
 
-            if not textUIShown then
-                lib.showTextUI(Locale['press_to_tag'], { position = 'left-center' })
-                textUIShown = true
-            end
+            if closestInteract then
+                nearbyWallId = closestInteract.id
 
-            if IsControlJustReleased(0, 38) then -- E key
-                lib.hideTextUI()
-                textUIShown = false
-                openTagUI(nearbyWallId)
+                if not textUIShown then
+                    lib.showTextUI(Locale['press_to_tag'], { position = 'left-center' })
+                    textUIShown = true
+                end
+
+                if IsControlJustReleased(0, 38) then
+                    lib.hideTextUI()
+                    textUIShown = false
+                    openTagUI(nearbyWallId)
+                end
+            else
+                if textUIShown then
+                    lib.hideTextUI()
+                    textUIShown = false
+                end
+                nearbyWallId = nil
             end
 
             Citizen.Wait(0)
