@@ -3,7 +3,7 @@ Config = {}
 -- Framework: 'esx', 'qbcore', 'standalone'
 Config.Framework = 'esx'
 Config.Debug     = false
-Config.Locale    = 'en'
+Config.Locale    = 'en'  -- reserved for future multi-locale support; currently only en.lua is shipped
 
 -- Interaction
 Config.SprayDistance = 2.5    -- meters to interact with a wall

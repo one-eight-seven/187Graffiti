@@ -1,12 +1,14 @@
-export default function WallInfo({ wall, sprayCount }) {
+export default function WallInfo({ wall, sprayCount, playerGang }) {
     if (!wall) return null
+
+    const isOwn = wall.ownerGang && wall.ownerGang === playerGang
 
     return (
         <div style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{wall.name}</span>
                 {wall.ownerGang
-                    ? <span className="badge badge-danger">{wall.ownerGang}</span>
+                    ? <span className={`badge ${isOwn ? 'badge-success' : 'badge-danger'}`}>{wall.ownerGang}</span>
                     : <span className="badge badge-success">Unclaimed</span>
                 }
             </div>

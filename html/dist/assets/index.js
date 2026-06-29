@@ -10,12 +10,14 @@
         leaderboard: [],
         totalWalls: 0,
         sprayCount: 5,
+        playerStats: null,
     };
 
     // DOM refs populated after buildUI()
     let panel, wallNameEl, wallOwnerEl, contestBox, contestGangEl,
         contestCountEl, contestFill, stylesGrid, gangRow, playerGangBadge,
         enemyBadge, ownBadge, gangLabel, sprayBtn, leaderboardList,
+        statsSection, statsSprays, statsClaimed, statsLost,
         sprayPanel, territoryPanel, tabSpray, tabTerritory;
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -23,13 +25,14 @@
     function $(id) { return document.getElementById(id); }
 
     function renderWallInfo() {
-        const { wall, sprayCount } = state;
+        const { wall, sprayCount, playerGang } = state;
         if (!wall) return;
 
         wallNameEl.textContent = wall.name || '';
 
+        const isOwn = wall.ownerGang && wall.ownerGang === playerGang;
         if (wall.ownerGang) {
-            wallOwnerEl.className = 'badge badge-danger';
+            wallOwnerEl.className = `badge ${isOwn ? 'badge-success' : 'badge-danger'}`;
             wallOwnerEl.textContent = wall.ownerGang;
         } else {
             wallOwnerEl.className = 'badge badge-success';
@@ -67,8 +70,8 @@
         const canSpray = playerGang && playerGang !== '' && selectedStyle;
         sprayBtn.disabled = !canSpray;
 
-        const isEnemy   = wall?.ownerGang && wall.ownerGang !== playerGang;
-        const isOwn     = wall?.ownerGang && wall.ownerGang === playerGang;
+        const isEnemy = wall?.ownerGang && wall.ownerGang !== playerGang;
+        const isOwn   = wall?.ownerGang && wall.ownerGang === playerGang;
 
         sprayBtn.textContent = !wall?.ownerGang ? '🖌️ Claim Wall'
                              : isEnemy           ? '🖌️ Contest Wall'
@@ -81,7 +84,6 @@
         } else {
             gangLabel.textContent = 'No gang assigned';
             playerGangBadge.textContent = '';
-            gangRow.style.display = '';
         }
 
         enemyBadge.style.display = isEnemy ? '' : 'none';
@@ -94,39 +96,47 @@
 
         if (!leaderboard || leaderboard.length === 0) {
             leaderboardList.innerHTML =
-                '<div style="text-align:center;color:var(--text-secondary);padding:40px 0">' +
+                '<div style="text-align:center;color:var(--text-secondary);padding:30px 0">' +
                 '<div style="font-size:32px">🏙️</div>' +
                 '<div style="margin-top:8px">No territories claimed yet.</div></div>';
-            return;
+        } else {
+            const medals = ['🥇', '🥈', '🥉'];
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;color:var(--text-secondary);font-size:11px;padding:0 4px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px';
+            header.innerHTML = '<span>Gang</span><span>Walls</span>';
+            leaderboardList.appendChild(header);
+
+            const list = document.createElement('div');
+            list.className = 'item-list';
+            leaderboard.forEach((entry, i) => {
+                const pct = totalWalls > 0 ? Math.round((entry.walls / totalWalls) * 100) : 0;
+                const row = document.createElement('div');
+                row.className = 'item';
+                row.innerHTML = `
+                    <div class="item-left">
+                        <div class="item-icon">${medals[i] ?? '#' + (i + 1)}</div>
+                        <div>
+                            <div class="item-name">${entry.gang}</div>
+                            <div class="item-sub">${pct}% of territory</div>
+                        </div>
+                    </div>
+                    <span class="badge badge-accent">${entry.walls}</span>
+                `;
+                list.appendChild(row);
+            });
+            leaderboardList.appendChild(list);
         }
 
-        const medals = ['🥇', '🥈', '🥉'];
-        const header = document.createElement('div');
-        header.style.cssText = 'display:flex;justify-content:space-between;color:var(--text-secondary);font-size:11px;padding:0 4px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px';
-        header.innerHTML = '<span>Gang</span><span>Walls</span>';
-        leaderboardList.appendChild(header);
+        renderStats();
+    }
 
-        const list = document.createElement('div');
-        list.className = 'item-list';
-
-        leaderboard.forEach((entry, i) => {
-            const pct = totalWalls > 0 ? Math.round((entry.walls / totalWalls) * 100) : 0;
-            const row = document.createElement('div');
-            row.className = 'item';
-            row.innerHTML = `
-                <div class="item-left">
-                    <div class="item-icon">${medals[i] ?? '#' + (i + 1)}</div>
-                    <div>
-                        <div class="item-name">${entry.gang}</div>
-                        <div class="item-sub">${pct}% of territory</div>
-                    </div>
-                </div>
-                <span class="badge badge-accent">${entry.walls}</span>
-            `;
-            list.appendChild(row);
-        });
-
-        leaderboardList.appendChild(list);
+    function renderStats() {
+        const s = state.playerStats;
+        if (!s) { statsSection.style.display = 'none'; return; }
+        statsSection.style.display = '';
+        statsSprays.textContent  = s.total_sprays  ?? 0;
+        statsClaimed.textContent = s.walls_tagged  ?? 0;
+        statsLost.textContent    = s.walls_lost     ?? 0;
     }
 
     function setTab(tab) {
@@ -209,30 +219,43 @@
     <!-- Territory panel -->
     <div id="g-territory-panel" style="display:none">
       <div id="g-leaderboard"></div>
+      <div id="g-stats-section" style="display:none">
+        <div class="divider"></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Your Stats</div>
+        <div class="stat-grid">
+          <div class="stat-card"><div id="g-stat-sprays" class="stat-value">0</div><div class="stat-label">Sprays</div></div>
+          <div class="stat-card"><div id="g-stat-claimed" class="stat-value">0</div><div class="stat-label">Claimed</div></div>
+          <div class="stat-card"><div id="g-stat-lost" class="stat-value">0</div><div class="stat-label">Lost</div></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>`;
 
         // Refs
-        panel            = $('g-panel');
-        wallNameEl       = $('g-wall-name');
-        wallOwnerEl      = $('g-wall-owner');
-        contestBox       = $('g-contest');
-        contestGangEl    = $('g-contest-gang');
-        contestCountEl   = $('g-contest-count');
-        contestFill      = $('g-contest-fill');
-        stylesGrid       = $('g-styles');
-        gangRow          = $('g-gang-row');
-        playerGangBadge  = $('g-gang-badge');
-        enemyBadge       = $('g-enemy-badge');
-        ownBadge         = $('g-own-badge');
-        gangLabel        = $('g-gang-label');
-        sprayBtn         = $('g-spray-btn');
-        leaderboardList  = $('g-leaderboard');
-        sprayPanel       = $('g-spray-panel');
-        territoryPanel   = $('g-territory-panel');
-        tabSpray         = $('g-tab-spray');
-        tabTerritory     = $('g-tab-territory');
+        panel           = $('g-panel');
+        wallNameEl      = $('g-wall-name');
+        wallOwnerEl     = $('g-wall-owner');
+        contestBox      = $('g-contest');
+        contestGangEl   = $('g-contest-gang');
+        contestCountEl  = $('g-contest-count');
+        contestFill     = $('g-contest-fill');
+        stylesGrid      = $('g-styles');
+        gangRow         = $('g-gang-row');
+        playerGangBadge = $('g-gang-badge');
+        enemyBadge      = $('g-enemy-badge');
+        ownBadge        = $('g-own-badge');
+        gangLabel       = $('g-gang-label');
+        sprayBtn        = $('g-spray-btn');
+        leaderboardList = $('g-leaderboard');
+        statsSection    = $('g-stats-section');
+        statsSprays     = $('g-stat-sprays');
+        statsClaimed    = $('g-stat-claimed');
+        statsLost       = $('g-stat-lost');
+        sprayPanel      = $('g-spray-panel');
+        territoryPanel  = $('g-territory-panel');
+        tabSpray        = $('g-tab-spray');
+        tabTerritory    = $('g-tab-territory');
 
         // Events
         $('g-close').addEventListener('click', close);
@@ -258,10 +281,11 @@
             const d = data.data;
             state.wall          = d.wall;
             state.playerGang    = d.playerGang;
-            state.tagStyles     = d.tagStyles  || [];
+            state.tagStyles     = d.tagStyles   || [];
             state.leaderboard   = d.leaderboard || [];
             state.totalWalls    = d.totalWalls  || 0;
             state.sprayCount    = d.sprayCount  || 5;
+            state.playerStats   = d.playerStats || null;
             state.selectedStyle = state.tagStyles[0]?.id ?? null;
             state.visible       = true;
 
@@ -273,8 +297,19 @@
             updateSprayBtn();
 
         } else if (data.action === 'leaderboardUpdate') {
-            state.leaderboard = data.leaderboard || [];
+            const lb = data.data?.leaderboard || data.leaderboard || [];
+            state.leaderboard = lb;
             if (state.activeTab === 'territory') renderLeaderboard();
+
+        } else if (data.action === 'wallStateUpdate') {
+            const w = data.data?.wall;
+            if (w) {
+                state.wall = w;
+                if (state.activeTab === 'spray') {
+                    renderWallInfo();
+                    updateSprayBtn();
+                }
+            }
         }
     });
 

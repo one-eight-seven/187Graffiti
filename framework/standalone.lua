@@ -35,6 +35,16 @@ function Framework.setGang(source, gang)
     playerGangs[source] = string.lower(tostring(gang))
 end
 
+-- Item system not implemented in standalone mode; always returns true.
+-- Replace with your own inventory check if needed.
+function Framework.hasItem(source, item)
+    return true
+end
+
+function Framework.removeItem(source, item, count)
+    -- no-op in standalone
+end
+
 function Framework.notify(source, message, type)
     TriggerClientEvent('187:notify', source, message, type)
 end

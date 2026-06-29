@@ -142,6 +142,15 @@ RegisterNetEvent('187graffiti:spray', function(data)
         return
     end
 
+    -- Item check
+    if Config.RequireItem then
+        if not Framework.hasItem(source, Config.SprayItem) then
+            TriggerClientEvent('187graffiti:notify', source, 'error', Locale['spray_no_item'])
+            return
+        end
+        Framework.removeItem(source, Config.SprayItem, 1)
+    end
+
     -- Cooldown
     local identifier = GetPlayerIdentifier(source, 0)
     local now        = os.time()
@@ -296,7 +305,8 @@ end
 -- ─── Cleanup ─────────────────────────────────────────────────────────────────
 
 AddEventHandler('playerDropped', function()
-    local identifier = GetPlayerIdentifier(source, 0)
+    local src        = source
+    local identifier = GetPlayerIdentifier(src, 0)
     if identifier then playerCooldowns[identifier] = nil end
 end)
 

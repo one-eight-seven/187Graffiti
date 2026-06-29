@@ -3,6 +3,8 @@ local wallBlips     = {}   -- [wallId] = blipHandle
 local nearbyWallId  = nil
 local isSprayActive = false
 local textUIShown   = false
+local nuiIsOpen     = false
+local openedWallId  = nil
 
 -- ─── Blip management ─────────────────────────────────────────────────────────
 
@@ -49,6 +51,23 @@ local function refreshBlip(wallId, state)
     if wallConfig then setBlipLabel(blip, wallConfig.name, state.ownerGang) end
 end
 
+-- ─── Leaderboard (computed locally to avoid extra callback on wallUpdated) ───
+
+local function computeLeaderboard()
+    local gangCounts = {}
+    for _, state in pairs(wallStates) do
+        if state.ownerGang then
+            gangCounts[state.ownerGang] = (gangCounts[state.ownerGang] or 0) + 1
+        end
+    end
+    local board = {}
+    for gang, count in pairs(gangCounts) do
+        board[#board + 1] = { gang = gang, walls = count }
+    end
+    table.sort(board, function(a, b) return a.walls > b.walls end)
+    return board
+end
+
 -- ─── UI ──────────────────────────────────────────────────────────────────────
 
 local function openTagUI(wallId)
@@ -58,9 +77,13 @@ local function openTagUI(wallId)
     end
     if not wallConfig then return end
 
-    local state      = wallStates[wallId] or {}
-    local playerGang = lib.callback.await('187graffiti:getPlayerGang', false)
-    local leaderboard = lib.callback.await('187graffiti:getLeaderboard', false)
+    local state       = wallStates[wallId] or {}
+    local playerGang  = lib.callback.await('187graffiti:getPlayerGang', false)
+    local leaderboard = computeLeaderboard()
+    local myStats     = lib.callback.await('187graffiti:getMyStats', false)
+
+    nuiIsOpen    = true
+    openedWallId = wallId
 
     SetNuiFocus(true, true)
     SendNUIMessage({
@@ -76,9 +99,10 @@ local function openTagUI(wallId)
             },
             playerGang  = playerGang or '',
             tagStyles   = Config.TagStyles,
-            leaderboard = leaderboard or {},
+            leaderboard = leaderboard,
             totalWalls  = #Config.Walls,
             sprayCount  = Config.SprayCount,
+            playerStats = myStats or { total_sprays = 0, walls_tagged = 0, walls_lost = 0 },
         }
     })
 end
@@ -142,6 +166,8 @@ end
 -- ─── NUI callbacks ───────────────────────────────────────────────────────────
 
 RegisterNUICallback('spray', function(data, cb)
+    nuiIsOpen    = false
+    openedWallId = nil
     SetNuiFocus(false, false)
     cb('ok')
     Citizen.SetTimeout(150, function()
@@ -150,6 +176,8 @@ RegisterNUICallback('spray', function(data, cb)
 end)
 
 RegisterNUICallback('close', function(_, cb)
+    nuiIsOpen    = false
+    openedWallId = nil
     SetNuiFocus(false, false)
     cb('ok')
 end)
@@ -158,6 +186,34 @@ end)
 
 RegisterNetEvent('187graffiti:wallUpdated', function(wallId, state)
     refreshBlip(wallId, state)
+
+    if nuiIsOpen then
+        -- Push updated leaderboard to the Territory tab
+        SendNUIMessage({ action = 'leaderboardUpdate', data = { leaderboard = computeLeaderboard() } })
+
+        -- If the player has this exact wall open in the spray tab, refresh its state
+        if openedWallId == wallId then
+            local wallConfig = nil
+            for _, w in ipairs(Config.Walls) do
+                if w.id == wallId then wallConfig = w; break end
+            end
+            if wallConfig then
+                SendNUIMessage({
+                    action = 'wallStateUpdate',
+                    data   = {
+                        wall = {
+                            id           = wallId,
+                            name         = wallConfig.name,
+                            ownerGang    = state.ownerGang,
+                            tagStyle     = state.tagStyle,
+                            contestGang  = state.contestGang,
+                            contestCount = state.contestCount or 0,
+                        }
+                    }
+                })
+            end
+        end
+    end
 end)
 
 RegisterNetEvent('187graffiti:notify', function(type, message)

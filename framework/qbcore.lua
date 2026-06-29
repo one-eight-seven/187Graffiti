@@ -37,6 +37,18 @@ function Framework.getGang(source)
     return ''
 end
 
+function Framework.hasItem(source, item)
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then return false end
+    local inv = player.Functions.GetItemByName(item)
+    return inv and inv.amount > 0
+end
+
+function Framework.removeItem(source, item, count)
+    local player = QBCore.Functions.GetPlayer(source)
+    if player then player.Functions.RemoveItem(item, count or 1) end
+end
+
 function Framework.notify(source, message, type)
     TriggerClientEvent('QBCore:Notify', source, message, type or 'primary')
 end

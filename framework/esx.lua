@@ -40,6 +40,18 @@ function Framework.getGang(source)
     return ''
 end
 
+function Framework.hasItem(source, item)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if not xPlayer then return false end
+    local inv = xPlayer.getInventoryItem(item)
+    return inv and inv.count > 0
+end
+
+function Framework.removeItem(source, item, count)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if xPlayer then xPlayer.removeInventoryItem(item, count or 1) end
+end
+
 function Framework.notify(source, message, type)
     TriggerClientEvent('esx:showNotification', source, message)
 end
