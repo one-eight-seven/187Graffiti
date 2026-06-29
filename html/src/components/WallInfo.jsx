@@ -1,0 +1,35 @@
+export default function WallInfo({ wall, sprayCount }) {
+    if (!wall) return null
+
+    return (
+        <div style={{ marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{wall.name}</span>
+                {wall.ownerGang
+                    ? <span className="badge badge-danger">{wall.ownerGang}</span>
+                    : <span className="badge badge-success">Unclaimed</span>
+                }
+            </div>
+
+            {wall.contestGang && (
+                <div style={{
+                    background: 'rgba(245,158,11,0.1)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    color: 'var(--warning)',
+                }}>
+                    ⚠ Contested by <strong>{wall.contestGang}</strong>
+                    {' '}— {wall.contestCount}/{sprayCount} sprays
+                    <div className="progress-bar" style={{ marginTop: '6px' }}>
+                        <div
+                            className="progress-fill"
+                            style={{ width: `${Math.min(100, (wall.contestCount / sprayCount) * 100)}%` }}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}

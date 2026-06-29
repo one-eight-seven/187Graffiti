@@ -1,0 +1,41 @@
+/* 187Graffiti — additional styles */
+.style-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.style-card {
+    flex-direction: column;
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    gap: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+}
+.style-card:hover {
+    background: var(--glass-hover);
+    border-color: var(--accent);
+}
+.style-card.active {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+}
+.style-card .emoji { font-size: 22px; }
+.style-card .label { font-size: 11px; font-weight: 500; color: var(--text-primary); margin-top: 4px; }
+
+.contest-box {
+    background: rgba(245,158,11,0.10);
+    border: 1px solid rgba(245,158,11,0.30);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--warning);
+    margin-bottom: 10px;
+}
